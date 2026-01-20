@@ -1,0 +1,69 @@
+[env]
+_.file = ".env"
+
+[tasks.test]
+description = "Run all tests"
+run = "go test -v ./..."
+
+[tasks."test:coverage"]
+description = "Run tests with coverage"
+run = "go test -v -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html"
+
+[tasks.build]
+description = "Build the project"
+run = "go build ./..."
+
+[tasks."example:basic"]
+description = "Run the basic remote WAL example with Tigris"
+run = """
+#!/bin/bash
+set -e
+cd examples/basic
+if [ ! -f ../../.env ]; then
+    echo "⚠️  No .env file found. Copy .env.sample to .env and configure your Tigris credentials."
+    echo "   Running in local-only mode..."
+    echo ""
+fi
+export $(grep -v '^#' ../../.env 2>/dev/null | xargs) || true
+go run main.go
+"""
+
+[tasks."example:idle-rotate"]
+description = "Run the idle rotation example"
+run = """
+#!/bin/bash
+set -e
+cd examples/idle-rotate
+go run main.go
+"""
+
+[tasks."example:basic:local"]
+description = "Run the basic example in local-only mode (no Tigris)"
+run = """
+#!/bin/bash
+set -e
+cd examples/basic
+# Unset Tigris env vars to force local mode
+unset TIGRIS_ACCESS_KEY_ID TIGRIS_SECRET_ACCESS_KEY TIGRIS_BUCKET_NAME
+go run main.go
+"""
+
+[tasks.lint]
+description = "Run linter"
+run = "golangci-lint run"
+
+[tasks.fmt]
+description = "Format code"
+run = "go fmt ./..."
+
+[tasks.clean]
+description = "Clean build artifacts and test data"
+run = """
+#!/bin/bash
+rm -rf coverage.out coverage.html
+rm -rf examples/*/wal-data
+rm -rf examples/*/wal-data-node2
+find . -name '*.test' -delete
+find . -name '*.out' -delete
+echo "✓ Cleaned build artifacts and test data"
+"""
