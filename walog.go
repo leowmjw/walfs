@@ -17,6 +17,8 @@ import (
 	"time"
 )
 
+const defaultUploadTimeout = 5 * time.Minute
+
 var (
 	ErrSegmentNotFound    = errors.New("segment not found")
 	ErrOffsetOutOfBounds  = errors.New("start offset is beyond segment size")
@@ -142,6 +144,48 @@ func WithCustomMarkerValidator(validator MarkerValidator) WALogOptions {
 	}
 }
 
+// WithRemoteStore sets the remote store for uploading and downloading segments.
+// When set, sealed segments can be uploaded and missing segments can be downloaded.
+func WithRemoteStore(store SegmentStore) WALogOptions {
+	return func(sm *WALog) {
+		sm.remoteStore = store
+	}
+}
+
+// WithUploadOnSeal enables automatic upload of segments when they are sealed.
+// Requires WithRemoteStore to be set.
+func WithUploadOnSeal(enabled bool) WALogOptions {
+	return func(sm *WALog) {
+		sm.uploadOnSeal = enabled
+	}
+}
+
+// WithUploadTimeout sets the timeout for segment upload operations.
+// Default is 5 minutes.
+func WithUploadTimeout(timeout time.Duration) WALogOptions {
+	return func(sm *WALog) {
+		sm.uploadTimeout = timeout
+	}
+}
+
+// WithDownloadOnRead enables downloading missing segments from remote store on recovery.
+// Requires WithRemoteStore to be set.
+func WithDownloadOnRead(enabled bool) WALogOptions {
+	return func(sm *WALog) {
+		sm.downloadOnRead = enabled
+	}
+}
+
+// WithIdleSegmentRotation enables automatic segment rotation when no writes occur
+// for the specified duration. This is useful for low-volume data producers that
+// need to ensure data is uploaded within a maximum time window.
+// Set to 0 to disable (default).
+func WithIdleSegmentRotation(duration time.Duration) WALogOptions {
+	return func(sm *WALog) {
+		sm.idleRotateDuration = duration
+	}
+}
+
 // WALog manages the lifecycle of each individual segments, including creation, rotation,
 // recovery, and read/write operations.
 type WALog struct {
@@ -188,6 +232,16 @@ type WALog struct {
 
 	customMarker    uint32
 	markerValidator MarkerValidator
+
+	// Remote store fields
+	remoteStore        SegmentStore
+	uploadOnSeal       bool
+	uploadTimeout      time.Duration
+	downloadOnRead     bool
+	idleRotateDuration time.Duration
+	idleRotateMu       sync.Mutex
+	idleRotateTimer    *time.Timer
+	lastWriteTime      time.Time
 }
 
 // NewWALog returns an initialized WALog that manages the segments in the provided dir with the given ext.
@@ -211,6 +265,7 @@ func NewWALog(dir string, ext string, opts ...WALogOptions) (*WALog, error) {
 		rotationCallback:    func() {},
 		dirSyncer:           DirectorySyncFunc(syncDir),
 		logIndex:            NewShardedIndex(),
+		uploadTimeout:       defaultUploadTimeout,
 	}
 
 	for _, opt := range opts {
@@ -270,6 +325,15 @@ func (wl *WALog) openSegment(id uint32) (*Segment, error) {
 }
 
 func (wl *WALog) recoverSegments() error {
+	// Download missing segments from remote store if enabled
+	if wl.downloadOnRead && wl.remoteStore != nil {
+		if err := wl.downloadMissingSegments(); err != nil {
+			slog.Warn("[walfs] failed to download missing segments",
+				slog.String("error", err.Error()))
+			// Continue with local recovery - download failure is not fatal
+		}
+	}
+
 	files, err := os.ReadDir(wl.dir)
 	if err != nil {
 		return fmt.Errorf("failed to read segment directory: %w", err)
@@ -380,6 +444,14 @@ func (wl *WALog) CommittedPosition() RecordPosition {
 
 // Close gracefully shuts down all segments managed by the WALog.
 func (wl *WALog) Close() error {
+	// Stop idle rotation timer
+	wl.idleRotateMu.Lock()
+	if wl.idleRotateTimer != nil {
+		wl.idleRotateTimer.Stop()
+		wl.idleRotateTimer = nil
+	}
+	wl.idleRotateMu.Unlock()
+
 	wl.writeMu.Lock()
 	defer wl.writeMu.Unlock()
 	var cErr error
@@ -438,6 +510,9 @@ func (wl *WALog) Write(data []byte, logIndex uint64) (RecordPosition, error) {
 		wl.unSynced = 0
 		wl.bytesPerSyncCalled.Add(1)
 	}
+
+	// Reset idle timer after successful write
+	wl.resetIdleTimer()
 
 	return pos, nil
 }
@@ -621,6 +696,7 @@ func (wl *WALog) RotateSegment() error {
 }
 
 func (wl *WALog) rotateSegment() error {
+	var sealedSegment *Segment
 	if wl.currentSegment != nil && !IsSealed(wl.currentSegment.GetFlags()) {
 		if err := wl.currentSegment.SealSegment(); err != nil {
 			return fmt.Errorf("failed to seal current segment: %w", err)
@@ -631,6 +707,14 @@ func (wl *WALog) rotateSegment() error {
 		}
 		// Mark the sealed segment as in-memory sealed
 		wl.currentSegment.MarkSealedInMemory()
+		sealedSegment = wl.currentSegment
+	}
+
+	// Upload sealed segment to remote store if enabled
+	if wl.uploadOnSeal && wl.remoteStore != nil && sealedSegment != nil {
+		if err := wl.uploadSegment(sealedSegment); err != nil {
+			return fmt.Errorf("failed to upload sealed segment %d: %w", sealedSegment.ID(), err)
+		}
 	}
 
 	var newID SegmentID = 1
@@ -650,6 +734,168 @@ func (wl *WALog) rotateSegment() error {
 	wl.snapshotSegments()
 	wl.rotationCallback()
 	return nil
+}
+
+// uploadSegment uploads a sealed segment to the remote store.
+func (wl *WALog) uploadSegment(seg *Segment) error {
+	if wl.remoteStore == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), wl.uploadTimeout)
+	defer cancel()
+
+	f, err := os.Open(seg.path)
+	if err != nil {
+		return fmt.Errorf("open segment file: %w", err)
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("stat segment file: %w", err)
+	}
+
+	if err := wl.remoteStore.Upload(ctx, seg.ID(), f, info.Size()); err != nil {
+		return fmt.Errorf("upload to remote store: %w", err)
+	}
+
+	slog.Debug("[walfs] uploaded segment to remote store",
+		slog.Uint64("segmentID", uint64(seg.ID())),
+		slog.Int64("size", info.Size()))
+
+	return nil
+}
+
+// downloadMissingSegments downloads segments from remote store that are not present locally.
+func (wl *WALog) downloadMissingSegments() error {
+	if wl.remoteStore == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), wl.uploadTimeout)
+	defer cancel()
+
+	// List remote segments
+	remoteIDs, err := wl.remoteStore.List(ctx)
+	if err != nil {
+		return fmt.Errorf("list remote segments: %w", err)
+	}
+
+	if len(remoteIDs) == 0 {
+		return nil
+	}
+
+	// Check which segments are missing locally
+	for _, segID := range remoteIDs {
+		localPath := SegmentFileName(wl.dir, wl.ext, segID)
+		if _, err := os.Stat(localPath); err == nil {
+			// Segment exists locally, skip
+			continue
+		}
+
+		// Download segment
+		if err := wl.downloadSegment(ctx, segID); err != nil {
+			slog.Warn("[walfs] failed to download segment",
+				slog.Uint64("segmentID", uint64(segID)),
+				slog.String("error", err.Error()))
+			// Continue with other segments - individual download failure is not fatal
+			continue
+		}
+	}
+
+	return nil
+}
+
+// downloadSegment downloads a single segment from remote store.
+func (wl *WALog) downloadSegment(ctx context.Context, segID SegmentID) error {
+	reader, size, err := wl.remoteStore.Download(ctx, segID)
+	if err != nil {
+		return fmt.Errorf("download from remote store: %w", err)
+	}
+	defer reader.Close()
+
+	localPath := SegmentFileName(wl.dir, wl.ext, segID)
+	tmpPath := localPath + ".tmp"
+
+	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, fileModePerm)
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+
+	written, err := io.Copy(f, reader)
+	if err != nil {
+		f.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("write segment data: %w", err)
+	}
+
+	if written != size {
+		f.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("size mismatch: expected %d, got %d", size, written)
+	}
+
+	if err := f.Sync(); err != nil {
+		f.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("sync segment file: %w", err)
+	}
+
+	if err := f.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("close segment file: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, localPath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("rename segment file: %w", err)
+	}
+
+	slog.Debug("[walfs] downloaded segment from remote store",
+		slog.Uint64("segmentID", uint64(segID)),
+		slog.Int64("size", size))
+
+	return nil
+}
+
+// resetIdleTimer resets the idle rotation timer.
+// Must be called after each write when idle rotation is enabled.
+func (wl *WALog) resetIdleTimer() {
+	if wl.idleRotateDuration <= 0 {
+		return
+	}
+
+	wl.idleRotateMu.Lock()
+	defer wl.idleRotateMu.Unlock()
+
+	wl.lastWriteTime = time.Now()
+
+	if wl.idleRotateTimer != nil {
+		wl.idleRotateTimer.Stop()
+	}
+
+	wl.idleRotateTimer = time.AfterFunc(wl.idleRotateDuration, func() {
+		wl.writeMu.Lock()
+		defer wl.writeMu.Unlock()
+
+		// Check if we should still rotate (no writes since timer was set)
+		wl.idleRotateMu.Lock()
+		elapsed := time.Since(wl.lastWriteTime)
+		wl.idleRotateMu.Unlock()
+
+		if elapsed >= wl.idleRotateDuration {
+			// Only rotate if there's actually data in the segment
+			if wl.currentSegment != nil && wl.currentSegment.WriteOffset() > segmentHeaderSize {
+				if err := wl.rotateSegment(); err != nil {
+					slog.Warn("[walfs] idle rotation failed",
+						slog.String("error", err.Error()))
+				} else {
+					slog.Debug("[walfs] idle rotation completed")
+				}
+			}
+		}
+	})
 }
 
 // Truncate truncates the WAL to the specified log index.

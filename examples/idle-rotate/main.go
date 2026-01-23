@@ -65,7 +65,7 @@ func main() {
 
 	for i := 1; i <= 3; i++ {
 		data := []byte(fmt.Sprintf("Regular write #%d at %v", i, time.Now().Format("15:04:05")))
-		pos, err := wal.Write(data)
+		pos, err := wal.Write(data, 0)
 		if err != nil {
 			log.Fatalf("Write failed: %v", err)
 		}
@@ -103,7 +103,7 @@ func main() {
 
 	// Write one more record after rotation
 	data := []byte(fmt.Sprintf("Post-rotation write at %v", time.Now().Format("15:04:05")))
-	pos, err := wal.Write(data)
+	pos, err := wal.Write(data, 0)
 	if err != nil {
 		log.Fatalf("Write failed: %v", err)
 	}
@@ -136,7 +136,7 @@ func main() {
 	fmt.Println("Node 1: Writing data...")
 	for i := 1; i <= 2; i++ {
 		data := []byte(fmt.Sprintf("Multi-node write #%d", i))
-		_, err := wal.Write(data)
+		_, err := wal.Write(data, 0)
 		if err != nil {
 			log.Fatalf("Write failed: %v", err)
 		}

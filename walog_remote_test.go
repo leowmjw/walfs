@@ -33,7 +33,7 @@ func TestWALog_WithRemoteStore_UploadOnSeal(t *testing.T) {
 	// Write enough data to trigger rotation
 	data := bytes.Repeat([]byte("A"), 100)
 	for i := 0; i < 5; i++ {
-		_, err := wal.Write(data)
+		_, err := wal.Write(data, 0)
 		require.NoError(t, err)
 	}
 
@@ -70,7 +70,7 @@ func TestWALog_WithRemoteStore_DownloadOnRead(t *testing.T) {
 	}
 
 	for _, data := range testData {
-		_, err := writer.Write(data)
+		_, err := writer.Write(data, 0)
 		require.NoError(t, err)
 	}
 
@@ -120,7 +120,7 @@ func TestWALog_WithRemoteStore_StrongConsistency(t *testing.T) {
 	defer wal.Close()
 
 	// Write data
-	_, err = wal.Write(bytes.Repeat([]byte("X"), 100))
+	_, err = wal.Write(bytes.Repeat([]byte("X"), 100), 0)
 	require.NoError(t, err)
 
 	// Rotate (which seals and uploads)
@@ -148,7 +148,7 @@ func TestWALog_WithRemoteStore_UploadFailure(t *testing.T) {
 	defer wal.Close()
 
 	// Write data
-	_, err = wal.Write(bytes.Repeat([]byte("Y"), 100))
+	_, err = wal.Write(bytes.Repeat([]byte("Y"), 100), 0)
 	require.NoError(t, err)
 
 	// Rotation should fail due to upload failure
@@ -195,7 +195,7 @@ func TestWALog_WithRemoteStore_NoRemoteStore(t *testing.T) {
 	defer wal.Close()
 
 	// Write and rotate should work normally
-	_, err = wal.Write([]byte("local only data"))
+	_, err = wal.Write([]byte("local only data"), 0)
 	require.NoError(t, err)
 
 	err = wal.RotateSegment()
@@ -224,7 +224,7 @@ func TestWALog_WithRemoteStore_UploadTimeout(t *testing.T) {
 	defer wal.Close()
 
 	// Write data
-	_, err = wal.Write(bytes.Repeat([]byte("Z"), 100))
+	_, err = wal.Write(bytes.Repeat([]byte("Z"), 100), 0)
 	require.NoError(t, err)
 
 	// Rotation should fail due to timeout
@@ -262,7 +262,7 @@ func TestWALog_WithRemoteStore_ConcurrentReaders(t *testing.T) {
 
 	// Write data to create segments
 	for i := 0; i < 10; i++ {
-		_, err := writer.Write([]byte("concurrent test data"))
+		_, err := writer.Write([]byte("concurrent test data"), 0)
 		require.NoError(t, err)
 	}
 	writer.RotateSegment()
@@ -319,7 +319,7 @@ func TestWALog_WithRemoteStore_MultipleRotations(t *testing.T) {
 
 	// Perform multiple rotations
 	for i := 0; i < 5; i++ {
-		_, err := wal.Write(bytes.Repeat([]byte{byte('A' + i)}, 100))
+		_, err := wal.Write(bytes.Repeat([]byte{byte('A' + i)}, 100), 0)
 		require.NoError(t, err)
 
 		err = wal.RotateSegment()
@@ -348,7 +348,7 @@ func TestWALog_WithRemoteStore_LargeSegment(t *testing.T) {
 
 	// Write large data
 	largeData := bytes.Repeat([]byte("LARGE"), 100000) // 500KB
-	_, err = wal.Write(largeData)
+	_, err = wal.Write(largeData, 0)
 	require.NoError(t, err)
 
 	// Rotate to upload
@@ -388,7 +388,7 @@ func TestWALog_WithRemoteStore_RecoveryFromRemote(t *testing.T) {
 		}
 
 		for _, rec := range testRecords {
-			_, err := writer.Write(rec)
+			_, err := writer.Write(rec, 0)
 			require.NoError(t, err)
 		}
 
@@ -440,7 +440,7 @@ func TestWALog_WithRemoteStore_PartialDownloadRecovery(t *testing.T) {
 	tmpDir := t.TempDir()
 	seg, err := walfs.OpenSegmentFile(tmpDir, ".wal", 1, walfs.WithSegmentSize(256))
 	require.NoError(t, err)
-	_, err = seg.Write([]byte("test data"))
+	_, err = seg.Write([]byte("test data"), 0)
 	require.NoError(t, err)
 	seg.SealSegment()
 	seg.Close()
@@ -482,7 +482,7 @@ func TestWALog_WithRemoteStore_EmptyRemoteStore(t *testing.T) {
 	assert.Equal(t, walfs.SegmentID(1), wal.Current().ID())
 
 	// Write should work
-	_, err = wal.Write([]byte("data"))
+	_, err = wal.Write([]byte("data"), 0)
 	require.NoError(t, err)
 }
 
@@ -494,7 +494,7 @@ func TestWALog_WithRemoteStore_MixedLocalAndRemote(t *testing.T) {
 	// Create local segment 1
 	seg1, err := walfs.OpenSegmentFile(dir, ".wal", 1, walfs.WithSegmentSize(256))
 	require.NoError(t, err)
-	_, err = seg1.Write([]byte("local-1"))
+	_, err = seg1.Write([]byte("local-1"), 0)
 	require.NoError(t, err)
 	seg1.SealSegment()
 	seg1.Close()
@@ -503,7 +503,7 @@ func TestWALog_WithRemoteStore_MixedLocalAndRemote(t *testing.T) {
 	tmpDir := t.TempDir()
 	seg2, err := walfs.OpenSegmentFile(tmpDir, ".wal", 2, walfs.WithSegmentSize(256))
 	require.NoError(t, err)
-	_, err = seg2.Write([]byte("remote-2"))
+	_, err = seg2.Write([]byte("remote-2"), 0)
 	require.NoError(t, err)
 	seg2.SealSegment()
 	seg2.Close()
