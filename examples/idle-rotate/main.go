@@ -64,7 +64,7 @@ func main() {
 	fmt.Printf("Writing data every %v (faster than idle timeout)...\n", time.Second)
 
 	for i := 1; i <= 3; i++ {
-		data := []byte(fmt.Sprintf("Regular write #%d at %v", i, time.Now().Format("15:04:05")))
+		data := fmt.Appendf(nil, "Regular write #%d at %v", i, time.Now().Format("15:04:05"))
 		pos, err := wal.Write(data, 0)
 		if err != nil {
 			log.Fatalf("Write failed: %v", err)
@@ -102,7 +102,7 @@ func main() {
 	fmt.Println("--- Scenario 3: Reading data from rotated segments ---")
 
 	// Write one more record after rotation
-	data := []byte(fmt.Sprintf("Post-rotation write at %v", time.Now().Format("15:04:05")))
+	data := fmt.Appendf(nil, "Post-rotation write at %v", time.Now().Format("15:04:05"))
 	pos, err := wal.Write(data, 0)
 	if err != nil {
 		log.Fatalf("Write failed: %v", err)
@@ -135,7 +135,7 @@ func main() {
 	// Write some data that will trigger rotation
 	fmt.Println("Node 1: Writing data...")
 	for i := 1; i <= 2; i++ {
-		data := []byte(fmt.Sprintf("Multi-node write #%d", i))
+		data := fmt.Appendf(nil, "Multi-node write #%d", i)
 		_, err := wal.Write(data, 0)
 		if err != nil {
 			log.Fatalf("Write failed: %v", err)

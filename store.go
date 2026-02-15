@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"sort"
+	"slices"
 	"sync"
 )
 
@@ -168,9 +168,7 @@ func (m *MemoryStore) List(ctx context.Context) ([]SegmentID, error) {
 	}
 	m.mu.RUnlock()
 
-	sort.Slice(ids, func(i, j int) bool {
-		return ids[i] < ids[j]
-	})
+	slices.Sort(ids)
 
 	return ids, nil
 }

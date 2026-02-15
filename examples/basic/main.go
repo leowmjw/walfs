@@ -91,7 +91,7 @@ func main() {
 
 	var positions []walfs.RecordPosition
 	for i, record := range records {
-		data := []byte(fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), record))
+		data := fmt.Appendf(nil, "[%s] %s", time.Now().Format("15:04:05"), record)
 		pos, err := wal.Write(data, 0)
 		if err != nil {
 			log.Fatalf("Write failed: %v", err)
@@ -186,7 +186,7 @@ func runLocalOnly() {
 	// Write some records
 	fmt.Println("--- Writing Records ---")
 	for i := 1; i <= 3; i++ {
-		data := []byte(fmt.Sprintf("[%s] Local record #%d", time.Now().Format("15:04:05"), i))
+		data := fmt.Appendf(nil, "[%s] Local record #%d", time.Now().Format("15:04:05"), i)
 		pos, err := wal.Write(data, 0)
 		if err != nil {
 			log.Fatalf("Write failed: %v", err)

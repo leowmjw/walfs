@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -221,9 +221,7 @@ func (t *TigrisStore) List(ctx context.Context) ([]SegmentID, error) {
 	}
 
 	// Sort in ascending order
-	sort.Slice(segmentIDs, func(i, j int) bool {
-		return segmentIDs[i] < segmentIDs[j]
-	})
+	slices.Sort(segmentIDs)
 
 	return segmentIDs, nil
 }

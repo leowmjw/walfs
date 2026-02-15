@@ -9,6 +9,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -359,9 +360,7 @@ func (wl *WALog) recoverSegments() error {
 	// 000000001.wal
 	// 000000002.wal
 	// 000000003.wal
-	sort.Slice(segmentIDs, func(i, j int) bool {
-		return segmentIDs[i] < segmentIDs[j]
-	})
+	slices.Sort(segmentIDs)
 
 	if len(segmentIDs) == 0 {
 		seg, err := wl.openSegment(1)
@@ -562,7 +561,7 @@ func (wl *WALog) writeBatchLocked(records [][]byte, logIndexes []uint64) ([]Reco
 		allPositions = append(allPositions, positions...)
 
 		if logIndexes != nil && written > 0 {
-			for i := 0; i < written; i++ {
+			for i := range written {
 				idx := logIndexes[indexOffset+i]
 				if idx > 0 {
 					wl.logIndex.Set(idx, positions[i])
@@ -571,7 +570,7 @@ func (wl *WALog) writeBatchLocked(records [][]byte, logIndexes []uint64) ([]Reco
 		}
 
 		// unsynced bytes counter
-		for i := 0; i < written; i++ {
+		for i := range written {
 			wl.unSynced += recordOverhead(int64(len(remaining[i])))
 		}
 
@@ -657,9 +656,7 @@ func (wl *WALog) Segments() map[SegmentID]*Segment {
 	defer wl.writeMu.RUnlock()
 
 	segmentsCopy := make(map[SegmentID]*Segment, len(wl.segments))
-	for id, seg := range wl.segments {
-		segmentsCopy[id] = seg
-	}
+	maps.Copy(segmentsCopy, wl.segments)
 	return segmentsCopy
 }
 
@@ -1329,9 +1326,7 @@ func (wl *WALog) QueuedSegmentsForDeletion() map[SegmentID]*Segment {
 	defer wl.deletionMu.Unlock()
 
 	segmentsCopy := make(map[SegmentID]*Segment, len(wl.segments))
-	for id, seg := range wl.pendingDeletion {
-		segmentsCopy[id] = seg
-	}
+	maps.Copy(segmentsCopy, wl.pendingDeletion)
 	return segmentsCopy
 }
 

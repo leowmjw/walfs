@@ -62,7 +62,7 @@ func TestReaderTracker_ConcurrentAccess(t *testing.T) {
 	const total = 1000
 
 	wg.Add(total)
-	for i := 0; i < total; i++ {
+	for i := range total {
 		go func(id uint64) {
 			defer wg.Done()
 			rt.Add(id)
@@ -75,7 +75,7 @@ func TestReaderTracker_ConcurrentAccess(t *testing.T) {
 	}
 
 	wg.Add(total)
-	for i := 0; i < total; i++ {
+	for i := range total {
 		go func(id uint64) {
 			defer wg.Done()
 			rt.Remove(id)

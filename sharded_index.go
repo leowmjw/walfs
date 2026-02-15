@@ -28,7 +28,7 @@ func NewShardedIndex() *ShardedIndex {
 	shardCount := defaultShardCount
 
 	shards := make([]*indexShard, shardCount)
-	for i := 0; i < shardCount; i++ {
+	for i := range shardCount {
 		shards[i] = &indexShard{
 			items: make(map[uint64]RecordPosition),
 		}

@@ -2,7 +2,6 @@ package walfs_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -11,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"sync"
 	"testing"
@@ -126,8 +126,8 @@ func TestSegmentManager_NewReader(t *testing.T) {
 	manager, err := walfs.NewWALog(dir, ".wal", walfs.WithMaxSegmentSize(1<<10))
 	assert.NoError(t, err)
 
-	for i := 0; i < 3; i++ {
-		_, err := manager.Current().Write([]byte(fmt.Sprintf("segment-%d", i+1)), 0)
+	for i := range 3 {
+		_, err := manager.Current().Write(fmt.Appendf(nil, "segment-%d", i+1), 0)
 		assert.NoError(t, err)
 		assert.NoError(t, manager.RotateSegment())
 	}
@@ -156,9 +156,9 @@ func TestSegmentManager_NewReaderWithStart(t *testing.T) {
 
 	for i := 1; i <= 3; i++ {
 		seg := manager.Current()
-		_, err = seg.Write([]byte(fmt.Sprintf("segment-%d-entry-1", i)), 0)
+		_, err = seg.Write(fmt.Appendf(nil, "segment-%d-entry-1", i), 0)
 		assert.NoError(t, err)
-		_, err = seg.Write([]byte(fmt.Sprintf("segment-%d-entry-2", i)), 0)
+		_, err = seg.Write(fmt.Appendf(nil, "segment-%d-entry-2", i), 0)
 		assert.NoError(t, err)
 
 		if i < 3 {
@@ -337,7 +337,7 @@ func TestSegmentManager_Rotation_NoDataLoss(t *testing.T) {
 	assert.NoError(t, err)
 
 	entries := []string{}
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		payload := fmt.Sprintf("data-%d", i)
 		entries = append(entries, payload)
 		_, err := manager.Write([]byte(payload), 0)
@@ -380,7 +380,7 @@ func TestSegmentManager_WriteRecordWithByteSync(t *testing.T) {
 	)
 	assert.NoError(t, err)
 	data := make([]byte, 1024)
-	for i := 0; i < 150; i++ {
+	for range 150 {
 		_, err = manager.Write(data, 0)
 		assert.NoError(t, err)
 	}
@@ -400,18 +400,18 @@ func TestSegmentManager_ConcurrentReadWrite(t *testing.T) {
 	numRecords := 50
 	writeData := []byte("stress-data")
 
-	for i := 0; i < numWriters; i++ {
+	for i := range numWriters {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < numRecords; j++ {
-				_, err := manager.Write([]byte(fmt.Sprintf("%s-%d-%d", writeData, id, j)), 0)
+			for j := range numRecords {
+				_, err := manager.Write(fmt.Appendf(nil, "%s-%d-%d", writeData, id, j), 0)
 				assert.NoError(t, err)
 			}
 		}(i)
 	}
 
-	for i := 0; i < numReaders; i++ {
+	for range numReaders {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -447,8 +447,8 @@ func TestWALog_ConcurrentWriteRead_WithSegmentRotation(t *testing.T) {
 	var writtenMu sync.Mutex
 
 	go func() {
-		for i := 0; i < totalRecords; i++ {
-			payload := []byte(fmt.Sprintf(dataTemplate, i))
+		for i := range totalRecords {
+			payload := fmt.Appendf(nil, dataTemplate, i)
 			_, err := manager.Write(payload, 0)
 			assert.NoError(t, err)
 
@@ -502,7 +502,7 @@ retryRead:
 
 	assert.Equal(t, written, readEntries, "read data should match written in order")
 
-	singleRecordSize := recordOverhead(int64(len([]byte(fmt.Sprintf(dataTemplate, totalRecords)))))
+	singleRecordSize := recordOverhead(int64(len(fmt.Appendf(nil, dataTemplate, totalRecords))))
 	totalSize := singleRecordSize * totalRecords
 	rotationExpected := totalSize / (1 << 18)
 
@@ -573,7 +573,7 @@ func TestWALog_NewReaderAfter(t *testing.T) {
 
 	var positions []*walfs.RecordPosition
 	for i := 1; i <= 3; i++ {
-		payload := []byte(fmt.Sprintf("entry-%d", i))
+		payload := fmt.Appendf(nil, "entry-%d", i)
 		pos, err := wal.Write(payload, 0)
 		assert.NoError(t, err)
 		positions = append(positions, &pos)
@@ -606,7 +606,7 @@ func TestReader_SeekNext(t *testing.T) {
 
 	var positions []walfs.RecordPosition
 	for i := 1; i <= 3; i++ {
-		pos, err := wal.Write([]byte(fmt.Sprintf("entry-%d", i)), 0)
+		pos, err := wal.Write(fmt.Appendf(nil, "entry-%d", i), 0)
 		assert.NoError(t, err)
 		positions = append(positions, pos)
 	}
@@ -634,8 +634,8 @@ func TestReader_NextClosesOlderSegmentReaders(t *testing.T) {
 	)
 	assert.NoError(t, err)
 
-	for i := 0; i < 100; i++ {
-		data := []byte(fmt.Sprintf("entry-%03d", i))
+	for i := range 100 {
+		data := fmt.Appendf(nil, "entry-%03d", i)
 		_, err := walog.Write(data, 0)
 		assert.NoError(t, err)
 	}
@@ -670,7 +670,7 @@ func TestWALog_MarkSegmentsForDeletion(t *testing.T) {
 			walfs.WithMaxSegmentSize(2<<20),
 			walfs.WithAutoCleanupPolicy(time.Millisecond*100, 1, 3, true))
 		assert.NoError(t, err)
-		for i := 0; i < 50; i++ {
+		for range 50 {
 			_, err := wal.Write(make([]byte, 1024*1024), 0)
 			assert.NoError(t, err)
 		}
@@ -685,7 +685,7 @@ func TestWALog_MarkSegmentsForDeletion(t *testing.T) {
 			walfs.WithMaxSegmentSize(2<<20),
 			walfs.WithAutoCleanupPolicy(time.Millisecond*100, 10, 40, true))
 		assert.NoError(t, err)
-		for i := 0; i < 50; i++ {
+		for range 50 {
 			_, err := wal.Write(make([]byte, 1024*1024), 0)
 			assert.NoError(t, err)
 		}
@@ -701,7 +701,7 @@ func TestWALog_MarkSegmentsForDeletion(t *testing.T) {
 			walfs.WithAutoCleanupPolicy(time.Millisecond*100, 1, 3, false))
 		assert.NoError(t, err)
 
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			_, err := wal.Write(make([]byte, 1024*1024), 0)
 			assert.NoError(t, err)
 		}
@@ -717,7 +717,7 @@ func TestWALog_MarkSegmentsForDeletion(t *testing.T) {
 			walfs.WithAutoCleanupPolicy(time.Millisecond*100, 1, 2, true))
 		assert.NoError(t, err)
 
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			_, err := wal.Write(make([]byte, 1024*1024), 0)
 			assert.NoError(t, err)
 		}
@@ -736,7 +736,7 @@ func TestWALog_MarkSegmentsForDeletion(t *testing.T) {
 			walfs.WithAutoCleanupPolicy(time.Millisecond*10, 1, 100, true))
 		assert.NoError(t, err)
 
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			_, err := wal.Write(make([]byte, 1024*1024), 0)
 			assert.NoError(t, err)
 		}
@@ -755,7 +755,7 @@ func TestWALog_StartPendingSegmentCleaner(t *testing.T) {
 		walfs.WithAutoCleanupPolicy(time.Millisecond*100, 1, 5, true))
 	assert.NoError(t, err)
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		_, err := wal.Write(make([]byte, 1024*1024), 0)
 		assert.NoError(t, err)
 	}
@@ -766,8 +766,7 @@ func TestWALog_StartPendingSegmentCleaner(t *testing.T) {
 		return true
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	wal.StartPendingSegmentCleaner(ctx, 50*time.Millisecond, canDeleteFn)
 
@@ -787,7 +786,7 @@ func TestWALog_CleanupStalePendingSegments(t *testing.T) {
 		walfs.WithAutoCleanupPolicy(time.Millisecond*100, 1, 5, true))
 	assert.NoError(t, err)
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		_, err := wal.Write(make([]byte, 1024*1024), 0)
 		assert.NoError(t, err)
 	}
@@ -1209,7 +1208,7 @@ func TestWALog_WriteBatch_HeaderConsistencyAcrossSegments(t *testing.T) {
 
 	records := make([][]byte, 25)
 	for i := range records {
-		records[i] = []byte(fmt.Sprintf("record-%03d", i))
+		records[i] = fmt.Appendf(nil, "record-%03d", i)
 	}
 
 	positions, err := wal.WriteBatch(records, nil)
@@ -1256,7 +1255,7 @@ func TestWALog_WriteBatch_SequentialReadAcrossRotation(t *testing.T) {
 
 	records := make([][]byte, 20)
 	for i := range records {
-		records[i] = []byte(fmt.Sprintf("seq-record-%03d", i))
+		records[i] = fmt.Appendf(nil, "seq-record-%03d", i)
 	}
 
 	positions, err := wal.WriteBatch(records, nil)
@@ -1266,7 +1265,7 @@ func TestWALog_WriteBatch_SequentialReadAcrossRotation(t *testing.T) {
 	reader := wal.NewReader()
 	defer reader.Close()
 
-	for i := 0; i < len(records); i++ {
+	for i := range records {
 		data, pos, err := reader.Next()
 		assert.NoError(t, err, "sequential read %d should succeed", i)
 		assert.Equal(t, records[i], data, "sequential read %d data should match", i)
@@ -1287,10 +1286,10 @@ func TestWALog_WriteBatch_ReadbackAfterMultipleBatches(t *testing.T) {
 	var allRecords [][]byte
 	var allPositions []walfs.RecordPosition
 
-	for batchNum := 0; batchNum < 5; batchNum++ {
+	for batchNum := range 5 {
 		batch := make([][]byte, 8)
 		for i := range batch {
-			batch[i] = []byte(fmt.Sprintf("batch%d-rec%d", batchNum, i))
+			batch[i] = fmt.Appendf(nil, "batch%d-rec%d", batchNum, i)
 		}
 		allRecords = append(allRecords, batch...)
 
@@ -1482,7 +1481,7 @@ func TestWALog_WriteBatch_ReadbackAfterReopen(t *testing.T) {
 		reader := wal2.NewReader()
 		defer reader.Close()
 
-		for i := 0; i < len(records); i++ {
+		for i := range records {
 			data, _, err := reader.Next()
 			assert.NoError(t, err, "sequential read %d should work after reopen", i)
 			assert.Equal(t, records[i], data, "sequential read %d data should match", i)
@@ -1533,8 +1532,8 @@ func TestSegmentManager_BackupSegmentsAfter(t *testing.T) {
 	manager, err := walfs.NewWALog(dir, ".wal", walfs.WithMaxSegmentSize(1024*1024))
 	assert.NoError(t, err)
 
-	for i := 0; i < 2; i++ {
-		_, err = manager.Current().Write([]byte(fmt.Sprintf("segment-%d", i+1)), 0)
+	for i := range 2 {
+		_, err = manager.Current().Write(fmt.Appendf(nil, "segment-%d", i+1), 0)
 		assert.NoError(t, err)
 		assert.NoError(t, manager.RotateSegment())
 	}
@@ -1673,8 +1672,8 @@ func TestBackupLastRotatedSegment_MultipleRotations(t *testing.T) {
 	manager, err := walfs.NewWALog(dir, ".wal", walfs.WithMaxSegmentSize(1024*1024))
 	assert.NoError(t, err)
 
-	for i := 0; i < 5; i++ {
-		_, err = manager.Current().Write([]byte(fmt.Sprintf("segment-%d", i+1)), 0)
+	for i := range 5 {
+		_, err = manager.Current().Write(fmt.Appendf(nil, "segment-%d", i+1), 0)
 		assert.NoError(t, err)
 		assert.NoError(t, manager.RotateSegment())
 	}
@@ -1701,8 +1700,8 @@ func TestBackupSegmentsAfter_AllSegments(t *testing.T) {
 	assert.NoError(t, err)
 
 	numSegments := 5
-	for i := 0; i < numSegments; i++ {
-		_, err = manager.Current().Write([]byte(fmt.Sprintf("segment-%d-data", i+1)), 0)
+	for i := range numSegments {
+		_, err = manager.Current().Write(fmt.Appendf(nil, "segment-%d-data", i+1), 0)
 		assert.NoError(t, err)
 		assert.NoError(t, manager.RotateSegment())
 	}
@@ -1734,8 +1733,8 @@ func TestBackupSegmentsAfter_RangeSelection(t *testing.T) {
 	manager, err := walfs.NewWALog(dir, ".wal", walfs.WithMaxSegmentSize(1024*1024))
 	assert.NoError(t, err)
 
-	for i := 0; i < 10; i++ {
-		_, err = manager.Current().Write([]byte(fmt.Sprintf("segment-%d", i+1)), 0)
+	for i := range 10 {
+		_, err = manager.Current().Write(fmt.Appendf(nil, "segment-%d", i+1), 0)
 		assert.NoError(t, err)
 		assert.NoError(t, manager.RotateSegment())
 	}
@@ -1808,8 +1807,8 @@ func TestBackup_ConcurrentWrites(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 100; i++ {
-			_, err := manager.Current().Write([]byte(fmt.Sprintf("data-%d", i)), 0)
+		for i := range 100 {
+			_, err := manager.Current().Write(fmt.Appendf(nil, "data-%d", i), 0)
 			if err != nil {
 				e <- err
 				return
@@ -1830,8 +1829,8 @@ func TestBackup_ConcurrentBackups(t *testing.T) {
 	manager, err := walfs.NewWALog(dir, ".wal", walfs.WithMaxSegmentSize(1024*1024))
 	assert.NoError(t, err)
 
-	for i := 0; i < 5; i++ {
-		_, err = manager.Current().Write([]byte(fmt.Sprintf("segment-%d", i+1)), 0)
+	for i := range 5 {
+		_, err = manager.Current().Write(fmt.Appendf(nil, "segment-%d", i+1), 0)
 		assert.NoError(t, err)
 		assert.NoError(t, manager.RotateSegment())
 	}
@@ -1839,7 +1838,7 @@ func TestBackup_ConcurrentBackups(t *testing.T) {
 	var wg sync.WaitGroup
 	e := make(chan error, 3)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		backupDir := filepath.Join(t.TempDir(), fmt.Sprintf("backups-%d", i))
 		wg.Add(1)
 		go func(dir string) {
@@ -1864,8 +1863,8 @@ func TestBackupSegmentsAfter_ConcurrentWithRotation(t *testing.T) {
 	manager, err := walfs.NewWALog(dir, ".wal", walfs.WithMaxSegmentSize(1024*1024))
 	assert.NoError(t, err)
 
-	for i := 0; i < 3; i++ {
-		_, err = manager.Current().Write([]byte(fmt.Sprintf("segment-%d", i+1)), 0)
+	for i := range 3 {
+		_, err = manager.Current().Write(fmt.Appendf(nil, "segment-%d", i+1), 0)
 		assert.NoError(t, err)
 		assert.NoError(t, manager.RotateSegment())
 	}
@@ -1886,8 +1885,8 @@ func TestBackupSegmentsAfter_ConcurrentWithRotation(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 3; i++ {
-			_, err := manager.Current().Write([]byte(fmt.Sprintf("new-segment-%d", i)), 0)
+		for i := range 3 {
+			_, err := manager.Current().Write(fmt.Appendf(nil, "new-segment-%d", i), 0)
 			if err != nil {
 				e <- err
 				return
@@ -1990,8 +1989,8 @@ func TestBackupSegmentsAfter_VerifyOrdering(t *testing.T) {
 	assert.NoError(t, err)
 
 	numSegments := 10
-	for i := 0; i < numSegments; i++ {
-		data := []byte(fmt.Sprintf("segment-%02d-content", i+1))
+	for i := range numSegments {
+		data := fmt.Appendf(nil, "segment-%02d-content", i+1)
 		_, err = manager.Current().Write(data, 0)
 		assert.NoError(t, err)
 		assert.NoError(t, manager.RotateSegment())
@@ -2225,8 +2224,8 @@ func TestSegmentCleanupRemovesDataAndIndex(t *testing.T) {
 	wal, err := walfs.NewWALog(dir, ".wal")
 	require.NoError(t, err)
 
-	for i := 0; i < 3; i++ {
-		_, err := wal.Write([]byte(fmt.Sprintf("entry-%d", i)), 0)
+	for i := range 3 {
+		_, err := wal.Write(fmt.Appendf(nil, "entry-%d", i), 0)
 		require.NoError(t, err)
 	}
 
@@ -2331,7 +2330,7 @@ func TestPositionForIndexConcurrentAccess(t *testing.T) {
 		}
 	}()
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		time.Sleep(20 * time.Millisecond)
 		_, _ = wal.PositionForIndex(1)
 	}
@@ -2797,7 +2796,7 @@ func TestWALog_WriteBatch_LogIndexesAcrossRotation(t *testing.T) {
 	const batchSize = 30
 	records := make([][]byte, batchSize)
 	logIndexes := make([]uint64, batchSize)
-	for i := 0; i < batchSize; i++ {
+	for i := range batchSize {
 		records[i] = bytes.Repeat([]byte{byte(i)}, 50)
 		logIndexes[i] = uint64(i + 1)
 	}
@@ -2828,9 +2827,7 @@ func TestWALog_WriteBatch_LogIndexesAcrossRotation(t *testing.T) {
 			segmentFirstIndexes = append(segmentFirstIndexes, firstIdx)
 		}
 	}
-	sort.Slice(segmentFirstIndexes, func(i, j int) bool {
-		return segmentFirstIndexes[i] < segmentFirstIndexes[j]
-	})
+	slices.Sort(segmentFirstIndexes)
 
 	require.Equal(t, uint64(1), segmentFirstIndexes[0], "first segment should have FirstLogIndex=1")
 	for i := 1; i < len(segmentFirstIndexes); i++ {
@@ -2852,7 +2849,7 @@ func TestWALog_WriteBatch_LogIndexesPartialRotation(t *testing.T) {
 	const batchSize = 10
 	records := make([][]byte, batchSize)
 	logIndexes := make([]uint64, batchSize)
-	for i := 0; i < batchSize; i++ {
+	for i := range batchSize {
 		records[i] = bytes.Repeat([]byte{byte('B' + i)}, 60)
 		logIndexes[i] = uint64(i + 2)
 	}
@@ -2886,8 +2883,8 @@ func TestWALog_ReaderCommitCheck_BasicBoundary(t *testing.T) {
 	defer wal.Close()
 
 	var positions []walfs.RecordPosition
-	for i := 0; i < 5; i++ {
-		data := []byte(fmt.Sprintf("record-%d", i))
+	for i := range 5 {
+		data := fmt.Appendf(nil, "record-%d", i)
 		pos, err := wal.Write(data, uint64(i+1))
 		require.NoError(t, err)
 		positions = append(positions, pos)
@@ -2933,8 +2930,8 @@ func TestWALog_ReaderCommitCheck_NoCommitReturnsNoData(t *testing.T) {
 	require.NoError(t, err)
 	defer wal.Close()
 
-	for i := 0; i < 3; i++ {
-		data := []byte(fmt.Sprintf("record-%d", i))
+	for i := range 3 {
+		data := fmt.Appendf(nil, "record-%d", i)
 		_, err := wal.Write(data, uint64(i+1))
 		require.NoError(t, err)
 	}
@@ -2960,7 +2957,7 @@ func TestWALog_ReaderCommitCheck_AcrossSegments(t *testing.T) {
 	var positions []walfs.RecordPosition
 	recordData := bytes.Repeat([]byte("x"), 100)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		pos, err := wal.Write(recordData, uint64(i+1))
 		require.NoError(t, err)
 		positions = append(positions, pos)
@@ -3025,7 +3022,7 @@ func TestWALog_ReaderCommitCheck_CommitInSecondSegment(t *testing.T) {
 	var positions []walfs.RecordPosition
 	recordData := bytes.Repeat([]byte("y"), 100)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		pos, err := wal.Write(recordData, uint64(i+1))
 		require.NoError(t, err)
 		positions = append(positions, pos)
@@ -3084,8 +3081,8 @@ func TestWALog_ReaderCommitCheck_CommitEqualsWrite(t *testing.T) {
 	defer wal.Close()
 
 	var lastPos walfs.RecordPosition
-	for i := 0; i < 5; i++ {
-		data := []byte(fmt.Sprintf("record-%d", i))
+	for i := range 5 {
+		data := fmt.Appendf(nil, "record-%d", i)
 		pos, err := wal.Write(data, uint64(i+1))
 		require.NoError(t, err)
 		lastPos = pos
@@ -3126,7 +3123,7 @@ func TestWALog_ReaderCommitCheck_CommitEqualsWrite_AcrossSegments(t *testing.T) 
 	recordData := bytes.Repeat([]byte("z"), 100)
 	numRecords := 10
 
-	for i := 0; i < numRecords; i++ {
+	for i := range numRecords {
 		pos, err := wal.Write(recordData, uint64(i+1))
 		require.NoError(t, err)
 		lastPos = pos

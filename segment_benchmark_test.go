@@ -153,7 +153,7 @@ func BenchmarkSegment(b *testing.B) {
 					defer seg.Close()
 
 					numEntries := min(100, maxWrites)
-					for i := 0; i < numEntries; i++ {
+					for range numEntries {
 						if _, err := seg.Write(testData, 0); err != nil {
 							b.Fatal(err)
 						}
@@ -275,7 +275,7 @@ func BenchmarkConcurrent(b *testing.B) {
 				var positions sync.Map
 				numbRewrites := min(100, calculateMaxEntries(dataSize)/2)
 
-				for i := 0; i < numbRewrites; i++ {
+				for i := range numbRewrites {
 					pos, err := seg.Write(data, 0)
 					if err != nil {
 						b.Fatal(err)
@@ -505,10 +505,7 @@ func BenchmarkWriteVsWriteBatch(b *testing.B) {
 				}
 
 				totalBytes := int64(recordSize * batchSize)
-				maxWrites := calculateMaxEntries(recordSize)
-				if maxWrites < batchSize {
-					maxWrites = batchSize
-				}
+				maxWrites := max(calculateMaxEntries(recordSize), batchSize)
 
 				b.ResetTimer()
 				b.SetBytes(totalBytes)

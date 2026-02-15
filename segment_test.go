@@ -250,7 +250,7 @@ func TestOpenSegmentFile_PopulatesLogIndexFromSealedIndex(t *testing.T) {
 
 	data := bytes.Repeat([]byte("s"), 40)
 	positions := make(map[uint64]RecordPosition)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		pos, err := seg.Write(data, uint64(i+1))
 		require.NoError(t, err)
 		positions[uint64(i+1)] = pos
@@ -281,7 +281,7 @@ func TestOpenSegmentFile_PopulatesLogIndexFromUnsealedSegment(t *testing.T) {
 
 	data := bytes.Repeat([]byte("u"), 40)
 	positions := make(map[uint64]RecordPosition)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		pos, err := seg.Write(data, uint64(i+5))
 		require.NoError(t, err)
 		positions[uint64(i+5)] = pos
@@ -310,7 +310,7 @@ func TestOpenSegmentFile_SkipsIndexEntriesWhenClearIndexOnFlush(t *testing.T) {
 
 	data := bytes.Repeat([]byte("c"), 32)
 	positions := make(map[uint64]RecordPosition)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		pos, err := seg.Write(data, uint64(i+10))
 		require.NoError(t, err)
 		positions[uint64(i+10)] = pos
@@ -344,8 +344,8 @@ func TestSegment_SequentialWrites(t *testing.T) {
 	})
 
 	var positions []RecordPosition
-	for i := 0; i < 10; i++ {
-		data := []byte(fmt.Sprintf("entry-%d", i))
+	for i := range 10 {
+		data := fmt.Appendf(nil, "entry-%d", i)
 		pos, err := seg.Write(data, uint64(1))
 		assert.NoError(t, err)
 		positions = append(positions, pos)
@@ -353,11 +353,11 @@ func TestSegment_SequentialWrites(t *testing.T) {
 
 	reader := seg.NewReader()
 	defer reader.Close()
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		data, current, err := reader.Next()
 		assert.NoError(t, err)
 
-		expected := []byte(fmt.Sprintf("entry-%d", i))
+		expected := fmt.Appendf(nil, "entry-%d", i)
 		assert.Equal(t, expected, data, "read data doesn't match written data")
 
 		assert.Equal(t, positions[i].Offset, current.Offset, "entry %d: wrong current offset", i)
@@ -377,8 +377,8 @@ func TestSegment_ConcurrentReads(t *testing.T) {
 	})
 
 	testData := make([]RecordPosition, 100)
-	for i := 0; i < 100; i++ {
-		data := []byte(fmt.Sprintf("test-%d", i))
+	for i := range 100 {
+		data := fmt.Appendf(nil, "test-%d", i)
 		pos, err := seg.Write(data, uint64(1))
 		assert.NoError(t, err)
 		testData[i] = pos
@@ -386,7 +386,7 @@ func TestSegment_ConcurrentReads(t *testing.T) {
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 10)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -652,8 +652,8 @@ func TestSegment_ConcurrentReadWhileWriting(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		<-start
-		for i := 0; i < 100; i++ {
-			data := []byte(fmt.Sprintf("msg-%d", i))
+		for i := range 100 {
+			data := fmt.Appendf(nil, "msg-%d", i)
 			_, err := seg.Write(data, uint64(1))
 			assert.NoError(t, err)
 		}
@@ -1070,14 +1070,14 @@ func TestSegment_ParallelStreamReaders(t *testing.T) {
 
 	payload := []byte("concurrent-read-entry")
 	var positions []RecordPosition
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		pos, err := seg.Write(payload, uint64(1))
 		assert.NoError(t, err)
 		positions = append(positions, pos)
 	}
 
 	var wg sync.WaitGroup
-	for r := 0; r < 1000; r++ {
+	for r := range 1000 {
 		wg.Add(1)
 		go func(readerID int) {
 			defer wg.Done()
@@ -1528,7 +1528,7 @@ func TestSegment_WriteBatch_Overflow(t *testing.T) {
 	assert.Less(t, written, len(records))
 	assert.Equal(t, written, len(positions))
 
-	for i := 0; i < written; i++ {
+	for i := range written {
 		data, _, readErr := seg.Read(positions[i].Offset)
 		assert.NoError(t, readErr)
 		assert.Equal(t, records[i], data)
@@ -1689,7 +1689,7 @@ func TestSegment_WriteBatch_ReadbackAtSegmentBoundary(t *testing.T) {
 	assert.Greater(t, written, 0)
 	assert.Equal(t, written, len(positions))
 
-	for i := 0; i < written; i++ {
+	for i := range written {
 		pos := positions[i]
 		data, _, readErr := seg.Read(pos.Offset)
 		assert.NoError(t, readErr, "record %d at offset %d (near boundary) should be readable", i, pos.Offset)
@@ -1742,7 +1742,7 @@ func TestSegment_WriteBatch_HeaderUpdateAfterPartialWrite(t *testing.T) {
 	assert.Equal(t, seg.WriteOffset(), updatedMeta.WriteOffset)
 	assert.Greater(t, updatedMeta.LastModifiedAt, initialMeta.LastModifiedAt)
 
-	for i := 0; i < written; i++ {
+	for i := range written {
 		data, _, readErr := seg.Read(positions[i].Offset)
 		assert.NoError(t, readErr)
 		assert.Equal(t, records[i], data)
@@ -1800,10 +1800,10 @@ func TestSegment_WriteBatch_MultipleConsecutiveBatches(t *testing.T) {
 	var allPositions []RecordPosition
 	totalWritten := 0
 
-	for batchNum := 0; batchNum < 3; batchNum++ {
+	for batchNum := range 3 {
 		batch := make([][]byte, 5)
 		for i := range batch {
-			batch[i] = []byte(fmt.Sprintf("batch%d-record%d", batchNum, i))
+			batch[i] = fmt.Appendf(nil, "batch%d-record%d", batchNum, i)
 		}
 		allRecords = append(allRecords, batch...)
 
@@ -1946,7 +1946,7 @@ func TestSegment_WriteBatch_Concurrent(t *testing.T) {
 	var totalWritten atomic.Int64
 	errors := make(chan error, numGoroutines)
 
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
@@ -1965,7 +1965,7 @@ func TestSegment_WriteBatch_Concurrent(t *testing.T) {
 			assert.Equal(t, written, len(positions), "written count should match positions length")
 			totalWritten.Add(int64(written))
 
-			for k := 0; k < written; k++ {
+			for k := range written {
 				data, _, readErr := seg.Read(positions[k].Offset)
 				if readErr != nil {
 					errors <- readErr
@@ -2032,7 +2032,7 @@ func TestSegment_WriteBatch_PartialWriteExactCount(t *testing.T) {
 
 	assert.Equal(t, written, len(positions), "written count MUST exactly match positions length")
 
-	for i := 0; i < written; i++ {
+	for i := range written {
 		data, _, readErr := seg.Read(positions[i].Offset)
 		assert.NoError(t, readErr, "position %d should be readable", i)
 		assert.Equal(t, records[i], data, "data at position %d should match", i)
@@ -2348,7 +2348,7 @@ func TestSegment_TruncateTo_UnsealsAndKeepsSegment(t *testing.T) {
 
 	var positions []RecordPosition
 	for i := 1; i <= 4; i++ {
-		pos, err := seg.Write([]byte(fmt.Sprintf("data-%d", i)), uint64(i))
+		pos, err := seg.Write(fmt.Appendf(nil, "data-%d", i), uint64(i))
 		require.NoError(t, err)
 		positions = append(positions, pos)
 	}

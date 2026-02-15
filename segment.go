@@ -430,7 +430,7 @@ func (seg *Segment) loadIndexFromFile() error {
 	firstIdx := seg.firstLogIndex
 	indexBuild := seg.logIndex != nil && firstIdx > 0
 	var idx uint64
-	for i := 0; i < count; i++ {
+	for range count {
 		if _, err := io.ReadFull(file, buf); err != nil {
 			return fmt.Errorf("read index: %w", err)
 		}
@@ -1400,10 +1400,7 @@ func (seg *Segment) applyTruncateHeader(newWriteOffset int64, newEntryCount int6
 }
 
 func (seg *Segment) zeroAheadFrom(offset int64) {
-	clearEnd := offset + 1024
-	if clearEnd > seg.mmapSize {
-		clearEnd = seg.mmapSize
-	}
+	clearEnd := min(offset+1024, seg.mmapSize)
 	for i := offset; i < clearEnd; i++ {
 		seg.mmapData[i] = 0
 	}

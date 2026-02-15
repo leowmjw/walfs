@@ -218,11 +218,11 @@ func TestMemoryStore_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Concurrent uploads
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(base int) {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for j := range numOperations {
 				segID := SegmentID(base*numOperations + j)
 				data := []byte("test data")
 				_ = store.Upload(ctx, segID, bytes.NewReader(data), int64(len(data)))
@@ -238,11 +238,11 @@ func TestMemoryStore_ConcurrentAccess(t *testing.T) {
 	assert.Len(t, ids, numGoroutines*numOperations)
 
 	// Concurrent reads
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(base int) {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for j := range numOperations {
 				segID := SegmentID(base*numOperations + j)
 				reader, _, err := store.Download(ctx, segID)
 				if err == nil {

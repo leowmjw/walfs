@@ -32,7 +32,7 @@ func TestWALog_WithRemoteStore_UploadOnSeal(t *testing.T) {
 
 	// Write enough data to trigger rotation
 	data := bytes.Repeat([]byte("A"), 100)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		_, err := wal.Write(data, 0)
 		require.NoError(t, err)
 	}
@@ -261,7 +261,7 @@ func TestWALog_WithRemoteStore_ConcurrentReaders(t *testing.T) {
 	require.NoError(t, err)
 
 	// Write data to create segments
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		_, err := writer.Write([]byte("concurrent test data"), 0)
 		require.NoError(t, err)
 	}
@@ -273,7 +273,7 @@ func TestWALog_WithRemoteStore_ConcurrentReaders(t *testing.T) {
 	var wg sync.WaitGroup
 	errChan := make(chan error, numReaders)
 
-	for i := 0; i < numReaders; i++ {
+	for i := range numReaders {
 		wg.Add(1)
 		go func(readerID int) {
 			defer wg.Done()
@@ -318,7 +318,7 @@ func TestWALog_WithRemoteStore_MultipleRotations(t *testing.T) {
 	defer wal.Close()
 
 	// Perform multiple rotations
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		_, err := wal.Write(bytes.Repeat([]byte{byte('A' + i)}, 100), 0)
 		require.NoError(t, err)
 

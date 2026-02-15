@@ -53,13 +53,13 @@ func TestShardedIndex_SetAndGet(t *testing.T) {
 func TestShardedIndex_SetDistributesAcrossShards(t *testing.T) {
 	idx := NewShardedIndex()
 
-	for i := uint64(0); i < 1000; i++ {
+	for i := range uint64(1000) {
 		idx.Set(i, RecordPosition{SegmentID: SegmentID(i), Offset: int64(i * 100)})
 	}
 
 	assert.Equal(t, int64(1000), idx.Len())
 
-	for i := uint64(0); i < 1000; i++ {
+	for i := range uint64(1000) {
 		pos, ok := idx.Get(i)
 		assert.True(t, ok, "entry %d should exist", i)
 		assert.Equal(t, SegmentID(i), pos.SegmentID)
@@ -187,7 +187,7 @@ func TestShardedIndex_DeleteRange_Comprehensive(t *testing.T) {
 
 	t.Run("delete large range", func(t *testing.T) {
 		idx := NewShardedIndex()
-		for i := uint64(0); i < 10000; i++ {
+		for i := range uint64(10000) {
 			idx.Set(i, RecordPosition{SegmentID: 1, Offset: int64(i)})
 		}
 
@@ -202,7 +202,7 @@ func TestShardedIndex_SetBatch_Comprehensive(t *testing.T) {
 		idx := NewShardedIndex()
 
 		entries := make([]IndexEntry, 100)
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			entries[i] = IndexEntry{
 				Index: uint64(i + 1),
 				Pos:   RecordPosition{SegmentID: SegmentID(i), Offset: int64(i * 100)},
@@ -212,7 +212,7 @@ func TestShardedIndex_SetBatch_Comprehensive(t *testing.T) {
 		idx.SetBatch(entries)
 		assert.Equal(t, int64(100), idx.Len())
 
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			pos, ok := idx.Get(uint64(i + 1))
 			assert.True(t, ok)
 			assert.Equal(t, SegmentID(i), pos.SegmentID)
@@ -316,7 +316,7 @@ func TestShardedIndex_Len(t *testing.T) {
 func TestShardedIndex_LenSlow(t *testing.T) {
 	idx := NewShardedIndex()
 
-	for i := uint64(0); i < 1000; i++ {
+	for i := range uint64(1000) {
 		idx.Set(i, RecordPosition{SegmentID: 1, Offset: int64(i)})
 	}
 
@@ -331,7 +331,7 @@ func TestShardedIndex_LenSlow(t *testing.T) {
 func TestShardedIndex_Clear(t *testing.T) {
 	idx := NewShardedIndex()
 
-	for i := uint64(0); i < 1000; i++ {
+	for i := range uint64(1000) {
 		idx.Set(i, RecordPosition{SegmentID: 1, Offset: int64(i)})
 	}
 	assert.Equal(t, int64(1000), idx.Len())
@@ -475,16 +475,16 @@ func TestShardedIndex_GetFirstLast_Comprehensive(t *testing.T) {
 func TestShardedIndex_ConcurrentReads(t *testing.T) {
 	idx := NewShardedIndex()
 
-	for i := uint64(0); i < 10000; i++ {
+	for i := range uint64(10000) {
 		idx.Set(i, RecordPosition{SegmentID: SegmentID(i % 100), Offset: int64(i)})
 	}
 
 	var wg sync.WaitGroup
-	for g := 0; g < 10; g++ {
+	for g := range 10 {
 		wg.Add(1)
 		go func(goroutine int) {
 			defer wg.Done()
-			for i := 0; i < 1000; i++ {
+			for i := range 1000 {
 				index := uint64((goroutine*1000 + i) % 10000)
 				pos, ok := idx.Get(index)
 				if !ok {
@@ -505,12 +505,12 @@ func TestShardedIndex_ConcurrentWrites(t *testing.T) {
 	idx := NewShardedIndex()
 
 	var wg sync.WaitGroup
-	for g := 0; g < 10; g++ {
+	for g := range 10 {
 		wg.Add(1)
 		go func(goroutine int) {
 			defer wg.Done()
 			base := uint64(goroutine * 1000)
-			for i := uint64(0); i < 1000; i++ {
+			for i := range uint64(1000) {
 				idx.Set(base+i, RecordPosition{
 					SegmentID: SegmentID(goroutine),
 					Offset:    int64(i),
@@ -526,28 +526,28 @@ func TestShardedIndex_ConcurrentWrites(t *testing.T) {
 func TestShardedIndex_ConcurrentMixed(t *testing.T) {
 	idx := NewShardedIndex()
 
-	for i := uint64(0); i < 5000; i++ {
+	for i := range uint64(5000) {
 		idx.Set(i, RecordPosition{SegmentID: 1, Offset: int64(i)})
 	}
 
 	var wg sync.WaitGroup
 
-	for g := 0; g < 5; g++ {
+	for range 5 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for i := 0; i < 1000; i++ {
+			for i := range 1000 {
 				idx.Get(uint64(i % 5000))
 			}
 		}()
 	}
 
-	for g := 0; g < 5; g++ {
+	for g := range 5 {
 		wg.Add(1)
 		go func(goroutine int) {
 			defer wg.Done()
 			base := uint64(5000 + goroutine*1000)
-			for i := uint64(0); i < 1000; i++ {
+			for i := range uint64(1000) {
 				idx.Set(base+i, RecordPosition{SegmentID: 1, Offset: int64(base + i)})
 			}
 		}(g)
@@ -561,7 +561,7 @@ func TestShardedIndex_ConcurrentMixed(t *testing.T) {
 func TestShardedIndex_ConcurrentDeleteRange(t *testing.T) {
 	idx := NewShardedIndex()
 
-	for i := uint64(0); i < 10000; i++ {
+	for i := range uint64(10000) {
 		idx.Set(i, RecordPosition{SegmentID: 1, Offset: int64(i)})
 	}
 
@@ -593,13 +593,13 @@ func TestShardedIndex_ConcurrentSetBatch(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	for g := 0; g < 10; g++ {
+	for g := range 10 {
 		wg.Add(1)
 		go func(goroutine int) {
 			defer wg.Done()
 			base := uint64(goroutine * 100)
 			entries := make([]IndexEntry, 100)
-			for i := 0; i < 100; i++ {
+			for i := range 100 {
 				entries[i] = IndexEntry{
 					Index: base + uint64(i),
 					Pos:   RecordPosition{SegmentID: SegmentID(goroutine), Offset: int64(i)},
@@ -617,7 +617,7 @@ func TestShardedIndex_ConcurrentSetBatch(t *testing.T) {
 func TestShardedIndex_ShardDistribution(t *testing.T) {
 	idx := NewShardedIndex()
 
-	for i := uint64(0); i < uint64(defaultShardCount*10); i++ {
+	for i := range uint64(defaultShardCount * 10) {
 		idx.Set(i, RecordPosition{SegmentID: 1, Offset: int64(i)})
 	}
 
@@ -666,7 +666,7 @@ func TestShardedIndex_MaxUint64Index(t *testing.T) {
 func TestShardedIndex_GetShardConsistency(t *testing.T) {
 	idx := NewShardedIndex()
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		testIndex := uint64(12345)
 		shard1 := idx.getShard(testIndex)
 		shard2 := idx.getShard(testIndex)
@@ -682,7 +682,7 @@ func TestShardedIndex_BatchOperationsLargeScale(t *testing.T) {
 	idx := NewShardedIndex()
 
 	entries := make([]IndexEntry, 100000)
-	for i := 0; i < 100000; i++ {
+	for i := range 100000 {
 		entries[i] = IndexEntry{
 			Index: uint64(i),
 			Pos:   RecordPosition{SegmentID: SegmentID(i % 1000), Offset: int64(i)},

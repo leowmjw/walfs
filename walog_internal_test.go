@@ -17,7 +17,7 @@ func TestTruncateWithActiveReaders(t *testing.T) {
 	defer wl.Close()
 
 	payload := make([]byte, 100)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		_, err := wl.Write(payload, uint64(i+1))
 		require.NoError(t, err)
 	}
@@ -65,7 +65,7 @@ func TestTruncateWithActiveReaders_NewSegmentIDDoesNotReuse(t *testing.T) {
 	defer wl.Close()
 
 	payload := make([]byte, 100)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		_, err := wl.Write(payload, uint64(i+1))
 		require.NoError(t, err)
 	}
@@ -108,7 +108,7 @@ func TestTruncateWithinTailWithActiveReaders(t *testing.T) {
 	defer wl.Close()
 
 	payload := make([]byte, 100)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		_, err := wl.Write(payload, uint64(i+1))
 		require.NoError(t, err)
 	}
@@ -157,7 +157,7 @@ func TestTruncateTargetSegmentWithActiveReader(t *testing.T) {
 	defer wl.Close()
 
 	payload := make([]byte, 100)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		_, err := wl.Write(payload, uint64(i+1))
 		require.NoError(t, err)
 	}
@@ -193,7 +193,7 @@ func TestTruncateWithActiveReaderOnDeletedSegment(t *testing.T) {
 	defer wl.Close()
 
 	payload := make([]byte, 100)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		_, err := wl.Write(payload, uint64(i+1))
 		require.NoError(t, err)
 	}
@@ -230,7 +230,7 @@ func TestClearIndexOnFlush_EnabledClearsAfterRotation(t *testing.T) {
 	defer wal.Close()
 
 	data := make([]byte, 100)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err := wal.Write(data, uint64(i+1))
 		require.NoError(t, err)
 	}
@@ -245,7 +245,7 @@ func TestClearIndexOnFlush_EnabledClearsAfterRotation(t *testing.T) {
 	entries := seg1.IndexEntries()
 	assert.Empty(t, entries, "sealed segment %d should have cleared index after flush", seg1ID)
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		_, err := wal.Write(data, uint64(i+4))
 		require.NoError(t, err)
 	}
@@ -267,7 +267,7 @@ func TestClearIndexOnFlush_ReopenedSegmentsRemainCleared(t *testing.T) {
 
 	data := make([]byte, 100)
 	positions := make(map[uint64]RecordPosition)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		pos, err := wal1.Write(data, uint64(i+1))
 		require.NoError(t, err)
 		positions[uint64(i+1)] = pos
@@ -280,7 +280,7 @@ func TestClearIndexOnFlush_ReopenedSegmentsRemainCleared(t *testing.T) {
 	require.True(t, seg1.IsSealed())
 	assert.Empty(t, seg1.IndexEntries(), "sealed segment should be cleared after flush in first session")
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		pos, err := wal1.Write(data, uint64(i+4))
 		require.NoError(t, err)
 		positions[uint64(i+4)] = pos
@@ -322,7 +322,7 @@ func TestClearIndexOnFlush_DisabledDoesNotClearOnRotation(t *testing.T) {
 	defer wal.Close()
 
 	data := make([]byte, 100)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err := wal.Write(data, uint64(i+1))
 		require.NoError(t, err)
 	}
@@ -350,7 +350,7 @@ func TestClearIndexFromMemory_ManualClearOnlySealedNotActive(t *testing.T) {
 	defer wal.Close()
 
 	data := make([]byte, 100)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err := wal.Write(data, uint64(i+1))
 		require.NoError(t, err)
 	}
@@ -359,7 +359,7 @@ func TestClearIndexFromMemory_ManualClearOnlySealedNotActive(t *testing.T) {
 	require.NoError(t, wal.RotateSegment())
 	seg1.WaitForIndexFlush()
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		_, err := wal.Write(data, uint64(i+4))
 		require.NoError(t, err)
 	}
@@ -382,7 +382,7 @@ func TestClearIndexFromMemory_ActiveSegmentCannotBeCleared(t *testing.T) {
 	defer wal.Close()
 
 	data := make([]byte, 50)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		_, err := wal.Write(data, uint64(i+1))
 		require.NoError(t, err)
 	}
@@ -412,8 +412,8 @@ func TestClearIndexOnFlush_MultipleRotations(t *testing.T) {
 	data := make([]byte, 50)
 	var sealedSegments []*Segment
 
-	for round := 0; round < 3; round++ {
-		for i := 0; i < 2; i++ {
+	for round := range 3 {
+		for i := range 2 {
 			_, err := wal.Write(data, uint64(round*2+i+1))
 			require.NoError(t, err)
 		}
@@ -473,7 +473,7 @@ func TestWALog_LogIndexWriteBatchAcrossRotation(t *testing.T) {
 	batchSize := 12
 	records := make([][]byte, batchSize)
 	logIndexes := make([]uint64, batchSize)
-	for i := 0; i < batchSize; i++ {
+	for i := range batchSize {
 		records[i] = bytes.Repeat([]byte("x"), 80)
 		logIndexes[i] = uint64(i + 10)
 	}
@@ -483,7 +483,7 @@ func TestWALog_LogIndexWriteBatchAcrossRotation(t *testing.T) {
 	require.Len(t, positions, batchSize)
 	require.Greater(t, wal.SegmentRotatedCount(), int64(0))
 
-	for i := 0; i < batchSize; i++ {
+	for i := range batchSize {
 		got, ok := wal.logIndex.Get(logIndexes[i])
 		require.True(t, ok)
 		assert.Equal(t, positions[i], got)
@@ -499,7 +499,7 @@ func TestWALog_LogIndexTruncateRemovesEntries(t *testing.T) {
 
 	data := bytes.Repeat([]byte("t"), 100)
 	positions := make([]RecordPosition, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		pos, err := wal.Write(data, uint64(i+1))
 		require.NoError(t, err)
 		positions[i] = pos
@@ -527,7 +527,7 @@ func TestWALog_LogIndexClearedOnFullTruncate(t *testing.T) {
 	defer wal.Close()
 
 	data := bytes.Repeat([]byte("f"), 80)
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		_, err := wal.Write(data, uint64(i+1))
 		require.NoError(t, err)
 	}
@@ -549,7 +549,7 @@ func TestWALog_LogIndexDeleteSegmentsRemovesEntries(t *testing.T) {
 	defer wal.Close()
 
 	data := bytes.Repeat([]byte("d"), 120)
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		_, err := wal.Write(data, uint64(i+1))
 		require.NoError(t, err)
 	}
@@ -573,7 +573,7 @@ func TestWALog_LogIndexDeleteSegmentsRemovesEntries(t *testing.T) {
 	require.Greater(t, count, int64(0))
 
 	lenBefore := wal.logIndex.Len()
-	for i := int64(0); i < count; i++ {
+	for i := range count {
 		idx := first + uint64(i)
 		_, ok := wal.logIndex.Get(idx)
 		require.True(t, ok)
@@ -582,7 +582,7 @@ func TestWALog_LogIndexDeleteSegmentsRemovesEntries(t *testing.T) {
 	err = wal.deleteSegments([]SegmentID{deleteID})
 	require.NoError(t, err)
 
-	for i := int64(0); i < count; i++ {
+	for i := range count {
 		idx := first + uint64(i)
 		_, ok := wal.logIndex.Get(idx)
 		assert.False(t, ok)
@@ -604,7 +604,7 @@ func TestWALog_LogIndexRebuiltOnReopen(t *testing.T) {
 	data := bytes.Repeat([]byte("r"), 80)
 	positions := make(map[uint64]RecordPosition)
 
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		pos, err := wal.Write(data, uint64(i+1))
 		require.NoError(t, err)
 		positions[uint64(i+1)] = pos

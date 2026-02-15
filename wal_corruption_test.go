@@ -102,7 +102,7 @@ func TestCorruption_Truncation_PreservesValidRecords(t *testing.T) {
 	seg, err := OpenSegmentFile(tmpDir, ".wal", 1)
 	require.NoError(t, err)
 
-	for i := 0; i < numRecords; i++ {
+	for i := range numRecords {
 		testData[i] = make([]byte, 256)
 		rand.Read(testData[i])
 		pos, err := seg.Write(testData[i], uint64(i+1))
@@ -156,7 +156,7 @@ func TestCorruption_MiddleRecord_PreservesBefore(t *testing.T) {
 	seg, err := OpenSegmentFile(tmpDir, ".wal", 1)
 	require.NoError(t, err)
 
-	for i := 0; i < numRecords; i++ {
+	for i := range numRecords {
 		testData[i] = make([]byte, 64)
 		rand.Read(testData[i])
 		pos, err := seg.Write(testData[i], uint64(i+1))
@@ -207,7 +207,7 @@ func TestCorruption_ZeroFill(t *testing.T) {
 	seg, err := OpenSegmentFile(tmpDir, ".wal", 1)
 	require.NoError(t, err)
 
-	for i := 0; i < numRecords; i++ {
+	for i := range numRecords {
 		testData[i] = make([]byte, 128)
 		rand.Read(testData[i])
 		pos, err := seg.Write(testData[i], uint64(i+1))
@@ -293,7 +293,7 @@ func TestCorruption_MultipleSegments_Isolation(t *testing.T) {
 	const numRecords = 50
 	testData := make([][]byte, numRecords)
 
-	for i := 0; i < numRecords; i++ {
+	for i := range numRecords {
 		testData[i] = make([]byte, 200)
 		rand.Read(testData[i])
 		_, err := wal.Write(testData[i], uint64(i+1))
@@ -355,7 +355,7 @@ func TestCorruption_MiddleSegment_StopsReading(t *testing.T) {
 	const recordSize = 200
 	testData := make([][]byte, numRecords)
 
-	for i := 0; i < numRecords; i++ {
+	for i := range numRecords {
 		testData[i] = make([]byte, recordSize)
 		rand.Read(testData[i])
 		_, err := wal.Write(testData[i], uint64(i+1))
@@ -445,7 +445,7 @@ func TestCorruption_BitFlipEveryPosition(t *testing.T) {
 
 	undetected := 0
 	for i := 0; i < recordSize-recordTrailerMarkerSize; i++ {
-		for bit := 0; bit < 8; bit++ {
+		for bit := range 8 {
 			seg.mmapData[pos.Offset+int64(i)] ^= 1 << bit
 
 			readData, _, err := seg.Read(pos.Offset)
